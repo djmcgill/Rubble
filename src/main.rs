@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Error as IoError};
 
@@ -8,7 +9,7 @@ const HAND_LIMIT: usize = 7;
 
 fn main() {
     let board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
-    let dict = make_dict().unwrap();
+    let _dict = make_dict().unwrap();
     println!("{}", board.to_string());
 }
 
@@ -32,7 +33,7 @@ impl Cell {
         match self {
             Cell::Empty => ' ',
             Cell::Placed(placed) => *placed,
-            Cell::Bonus(bonus) => '*', // FIXME
+            Cell::Bonus(_) => '*', // FIXME
         }
     }
 }
@@ -71,24 +72,121 @@ impl ToString for Board {
     }
 }
 impl Board {
-    pub fn adjacent_to_placed_tile(&self, xy: (i32, i32)) -> bool {
-        for &y_diff in &[-1,0,1] {
-            let y = xy.1 + y_diff;
-            if y < 0 || y >= BOARD_HEIGHT as i32 { continue; }
-
-            for &x_diff in &[-1,0,1] {
-                if x_diff == 0 && y_diff == 0 { continue; }
-                let x = xy.0 + x_diff;
-                if x < 0 || x >= BOARD_WIDTH as i32 { continue; }
-                
-                if let Cell::Placed(_) = self.0[y as usize][x as usize] { return true; }
+    pub fn all_tiles_connected(&self) -> bool {
+        let mut tiles: HashSet<(usize, usize)> = HashSet::new();
+        for y in 0..BOARD_HEIGHT {
+            for x in 0..BOARD_HEIGHT {
+                if let Cell::Placed(_) = self.0[y][x] {
+                    tiles.insert((x, y));
+                }
             }
         }
-        false
+        // Get an arbitrary tile
+        let option_next = tiles.iter().next().cloned();
+        match option_next {
+            // No tiles? Trivially connected
+            None => return true,
+            Some(first_ix) => {
+                // This queue contains tiles connected to our original tile
+                let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
+                tiles.remove(&first_ix);
+                queue.push_front(first_ix);
+                loop {
+                    let option_front = queue.pop_front();
+                    match option_front {
+                        // We've run out of connected tiles to visit
+                        // So we check if there are any unvisited (unconnected) tiles
+                        None => return tiles.is_empty(),
+                        Some((x, y)) => {
+                            // look at surrounding tiles:
+                            //   1) discard any that aren't Placed
+                            //   2) remove from `tiles`
+                            //   3) any that _were_ in `tiles`, add to `queue`
+                            for &(x_diff, y_diff) in &[(-1i32, 0i32), (1, 0), (0, -1), (0, 1)] {
+                                if x == 0 && x_diff == -1 { continue; }
+                                if x == BOARD_WIDTH && x_diff == 1 { continue; }
+                                if y == 0 && y_diff == -1 { continue; }
+                                if y == BOARD_HEIGHT && y_diff == 1 { continue; }
+                                let new_x = (x as i32 +x_diff) as usize;
+                                let new_y = (y as i32 +y_diff) as usize;
+                                if let Cell::Placed(_) = self.0[y][x] {
+                                    let removed = tiles.remove(&(new_x, new_y));
+                                    if removed {
+                                        queue.push_front((new_x, new_y));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 struct Game {
     board: Board,
     hand: Vec<char>,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn all_tiles_connected_empty() {
+        let board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
+        assert!(board.all_tiles_connected());
+    }
+
+    #[test]
+    fn all_tiles_connected_single() {
+        let mut board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
+        board.0[3][4] = Cell::Placed('c');
+        assert!(board.all_tiles_connected());
+    }
+
+    #[test]
+    fn all_tiles_connected_multiple() {
+        let mut board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
+        board.0[3][4] = Cell::Placed('c');
+        board.0[3][5] = Cell::Placed('c');
+        board.0[3][6] = Cell::Placed('c');
+        board.0[4][5] = Cell::Placed('c');
+        assert!(board.all_tiles_connected());
+    }
+
+    #[test]
+    fn all_tiles_connected_edge() {
+        let mut board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
+        board.0[0][0] = Cell::Placed('c');
+        board.0[0][1] = Cell::Placed('c');
+        assert!(board.all_tiles_connected());
+    }
+
+    #[test]
+    fn all_tiles_connected_disconnect() {
+        let mut board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
+        board.0[3][4] = Cell::Placed('c');
+        board.0[3][6] = Cell::Placed('c');
+        assert!(!board.all_tiles_connected());
+    }
+
+    #[test]
+    fn all_tiles_connected_disconnect_diag() {
+        let mut board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
+        board.0[3][4] = Cell::Placed('c');
+        board.0[4][5] = Cell::Placed('c');
+        assert!(!board.all_tiles_connected());
+    }
+
+    #[test]
+    fn all_tiles_connected_disconnect_multiple() {
+        let mut board = Board([[Cell::Empty; BOARD_WIDTH]; BOARD_HEIGHT]);
+        board.0[3][4] = Cell::Placed('c');
+        board.0[3][5] = Cell::Placed('c');
+        board.0[3][1] = Cell::Placed('c');
+        board.0[3][2] = Cell::Placed('c');
+        assert!(!board.all_tiles_connected());
+    }
 }

@@ -1,0 +1,6 @@
+[package]
+name = "rubble"
+version = "0.1.0"
+authors = ["David McGillicuddy <contact@djmcgill.co.uk>"]
+
+[dependencies]

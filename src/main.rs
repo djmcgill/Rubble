@@ -91,7 +91,7 @@ impl Board {
                 let mut queue: VecDeque<(usize, usize)> = VecDeque::new();
                 tiles.remove(&first_ix);
                 queue.push_front(first_ix);
-                loop {
+                for _ in 0..BOARD_WIDTH*BOARD_HEIGHT+1 {
                     let option_front = queue.pop_front();
                     match option_front {
                         // We've run out of connected tiles to visit
@@ -119,6 +119,7 @@ impl Board {
                         }
                     }
                 }
+                panic!("Somehow looped past the whole array")
             }
         }
     }
@@ -155,6 +156,13 @@ mod test {
         board.0[4][5] = Cell::Placed('c');
         assert!(board.all_tiles_connected());
     }
+
+    #[test]
+    fn all_tiles_connected_full() {
+        let mut board = Board([[Cell::Placed('c'); BOARD_WIDTH]; BOARD_HEIGHT]);
+        assert!(board.all_tiles_connected());
+    }
+
 
     #[test]
     fn all_tiles_connected_edge() {
